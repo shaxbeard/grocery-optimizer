@@ -20,16 +20,19 @@ export function createApp(db) {
   }
 
   function parseItem(body, existing = {}) {
-    const item = { name: '', category: 'pantry', unit: '', quantity: 0, target: 0, ...existing, ...body }
+    const item = { name: '', category: 'pantry', unit: '', quantity: 0, target: 0, weekly: 0, per_week: 0, ...existing, ...body }
     item.name = String(item.name).trim()
     if (!item.name) return 'name is required'
     if (!CATEGORIES.includes(item.category)) return 'invalid category'
-    if (!isNum(item.quantity) || !isNum(item.target)) return 'quantity and target must be non-negative numbers'
+    if (!isNum(item.quantity) || !isNum(item.target) || !isNum(item.per_week)) {
+      return 'quantity, target and per_week must be non-negative numbers'
+    }
+    item.weekly = item.weekly ? 1 : 0
     return item
   }
 
   const insertItem = db.prepare(
-    'INSERT INTO items (name, category, unit, quantity, target) VALUES (@name, @category, @unit, @quantity, @target)'
+    'INSERT INTO items (name, category, unit, quantity, target, weekly, per_week) VALUES (@name, @category, @unit, @quantity, @target, @weekly, @per_week)'
   )
 
   // Items
@@ -54,7 +57,7 @@ export function createApp(db) {
     const item = parseItem(req.body, existing)
     if (typeof item === 'string') return bad(res, item)
     db.prepare(
-      'UPDATE items SET name = @name, category = @category, unit = @unit, quantity = @quantity, target = @target WHERE id = @id'
+      'UPDATE items SET name = @name, category = @category, unit = @unit, quantity = @quantity, target = @target, weekly = @weekly, per_week = @per_week WHERE id = @id'
     ).run({ ...item, id: existing.id })
     res.json(withPrices([getItem(existing.id)])[0])
   })

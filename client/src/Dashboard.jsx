@@ -42,13 +42,13 @@ function Prices({ item, refresh }) {
   )
 }
 
-function NumberCell({ item, field, refresh }) {
+function NumberCell({ item, field, label = field, refresh }) {
   return (
     <input
       type="number"
       min="0"
       step="any"
-      aria-label={`${item.name} ${field}`}
+      aria-label={`${item.name} ${label}`}
       defaultValue={item[field]}
       key={item[field]}
       onBlur={(e) => {
@@ -106,7 +106,7 @@ function EditCells({ item, refresh, onDone }) {
         </select>
         <form id={id} onSubmit={save} />
       </td>
-      <td colSpan={3}></td>
+      <td colSpan={5}></td>
       <td>
         <button form={id} className="link">Save</button>
         <button type="button" className="link" onClick={onDone}>Cancel</button>
@@ -119,8 +119,9 @@ export default function Dashboard({ items, refresh }) {
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [weeklyOnly, setWeeklyOnly] = useState(false)
 
-  const shown = filter === 'all' ? items : items.filter((i) => i.category === filter)
+  const shown = items.filter((i) => (filter === 'all' || i.category === filter) && (!weeklyOnly || i.weekly))
 
   return (
     <>
@@ -130,6 +131,14 @@ export default function Dashboard({ items, refresh }) {
             {c}
           </button>
         ))}
+      </div>
+      <div className="filters" role="group" aria-label="View">
+        <button className={weeklyOnly ? 'chip' : 'chip active'} onClick={() => setWeeklyOnly(false)}>
+          all items
+        </button>
+        <button className={weeklyOnly ? 'chip active' : 'chip'} onClick={() => setWeeklyOnly(true)}>
+          weekly purchases
+        </button>
       </div>
 
       <AddItemForm refresh={refresh} />
@@ -141,6 +150,8 @@ export default function Dashboard({ items, refresh }) {
             <th>Category</th>
             <th>Have</th>
             <th>Want</th>
+            <th>Weekly</th>
+            <th>Per week</th>
             <th>Best price</th>
             <th></th>
           </tr>
@@ -157,6 +168,15 @@ export default function Dashboard({ items, refresh }) {
                 <td className="muted">{item.category}</td>
                 <td><NumberCell item={item} field="quantity" refresh={refresh} /></td>
                 <td><NumberCell item={item} field="target" refresh={refresh} /></td>
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label={`${item.name} weekly`}
+                    checked={Boolean(item.weekly)}
+                    onChange={(e) => api.updateItem(item.id, { weekly: e.target.checked }).then(refresh)}
+                  />
+                </td>
+                <td>{item.weekly ? <NumberCell item={item} field="per_week" label="per week" refresh={refresh} /> : null}</td>
                 <td>{item.best ? `${money(item.best.price)} at ${item.best.store}` : <span className="muted">-</span>}</td>
                 <td>
                   <button className="link" onClick={() => setOpen(open === item.id ? null : item.id)}>
@@ -170,7 +190,7 @@ export default function Dashboard({ items, refresh }) {
               </tr>
               {open === item.id && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={8}>
                     <Prices item={item} refresh={refresh} />
                   </td>
                 </tr>

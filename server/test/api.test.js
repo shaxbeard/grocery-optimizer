@@ -33,6 +33,14 @@ describe('items', () => {
     expect((await api.post('/api/items').send({ name: 'x', quantity: -1 })).status).toBe(400)
   })
 
+  it('marks items weekly with a per-week quantity', async () => {
+    const item = await addItem()
+    expect(item).toMatchObject({ weekly: 0, per_week: 0 })
+    const updated = await api.put(`/api/items/${item.id}`).send({ weekly: true, per_week: 2 })
+    expect(updated.body).toMatchObject({ name: 'Milk', weekly: 1, per_week: 2 })
+    expect((await api.put(`/api/items/${item.id}`).send({ per_week: -1 })).status).toBe(400)
+  })
+
   it('updates partially and deletes', async () => {
     const item = await addItem()
     const updated = await api.put(`/api/items/${item.id}`).send({ quantity: 2 })

@@ -10,7 +10,9 @@ export function openDb(path = 'grocery.db') {
       category TEXT NOT NULL DEFAULT 'pantry',
       unit TEXT NOT NULL DEFAULT '',
       quantity REAL NOT NULL DEFAULT 0,
-      target REAL NOT NULL DEFAULT 0
+      target REAL NOT NULL DEFAULT 0,
+      weekly INTEGER NOT NULL DEFAULT 0,
+      per_week REAL NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS prices (
       id INTEGER PRIMARY KEY,
@@ -34,5 +36,10 @@ export function openDb(path = 'grocery.db') {
       UNIQUE (list_id, item_id)
     );
   `)
+  const columns = db.pragma('table_info(items)').map((c) => c.name)
+  if (!columns.includes('weekly')) {
+    db.exec('ALTER TABLE items ADD COLUMN weekly INTEGER NOT NULL DEFAULT 0')
+    db.exec('ALTER TABLE items ADD COLUMN per_week REAL NOT NULL DEFAULT 0')
+  }
   return db
 }

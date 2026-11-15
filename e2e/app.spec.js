@@ -8,7 +8,7 @@ test('full grocery workflow', async ({ page }) => {
   await page.getByLabel('New item name').fill('Milk')
   await page.getByLabel('New item category').selectOption('dairy')
   await page.getByRole('button', { name: 'Add item' }).click()
-  await expect(page.getByRole('cell', { name: 'Milk' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Milk', exact: true })).toBeVisible()
   for (const [name, cat] of [['Apples', 'produce'], ['Rice', 'pantry'], ['Soap', 'household'], ['Tmp', 'meat']]) {
     await page.getByLabel('New item name').fill(name)
     await page.getByLabel('New item category').selectOption(cat)
@@ -21,15 +21,26 @@ test('full grocery workflow', async ({ page }) => {
   await page.getByLabel('Edit name').fill('Beef')
   await page.getByLabel('Edit category').selectOption('meat')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await expect(page.getByRole('cell', { name: 'Beef' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Beef', exact: true })).toBeVisible()
   await page.getByRole('row', { name: /Beef/ }).getByRole('button', { name: 'Delete' }).click()
-  await expect(page.getByRole('cell', { name: 'Beef' })).toHaveCount(0)
-  await expect(page.getByRole('cell', { name: 'Milk' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Beef', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('cell', { name: 'Milk', exact: true })).toBeVisible()
+
+  // Weekly purchases
+  await page.getByLabel('Apples weekly').click()
+  await expect(page.getByLabel('Apples weekly')).toBeChecked()
+  await page.getByLabel('Apples per week').fill('4')
+  await page.getByLabel('Apples per week').blur()
+  await page.getByRole('button', { name: 'weekly purchases' }).click()
+  await expect(page.getByRole('cell', { name: 'Apples', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Rice', exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('Apples per week')).toHaveValue('4')
+  await page.getByRole('button', { name: 'all items' }).click()
 
   // Filter
   await page.getByRole('button', { name: 'produce', exact: true }).click()
-  await expect(page.getByRole('cell', { name: 'Apples' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'Milk' })).toHaveCount(0)
+  await expect(page.getByRole('cell', { name: 'Apples', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Milk', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'all', exact: true }).click()
 
   // Prices: best price shown

@@ -96,4 +96,16 @@ describe('Dashboard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(api.deleteItem).toHaveBeenCalledWith(1)
   })
+
+  it('toggles weekly and filters to weekly purchases', async () => {
+    api.updateItem.mockResolvedValue({})
+    const items = [item(), item({ id: 2, name: 'Apples', category: 'produce', weekly: 1, per_week: 4 })]
+    render(<Dashboard items={items} refresh={vi.fn()} />)
+    await userEvent.click(screen.getByLabelText('Milk weekly'))
+    expect(api.updateItem).toHaveBeenCalledWith(1, { weekly: true })
+    expect(screen.getByLabelText('Apples per week')).toHaveValue(4)
+    await userEvent.click(screen.getByRole('button', { name: 'weekly purchases' }))
+    expect(screen.queryByText('Milk')).not.toBeInTheDocument()
+    expect(screen.getByText('Apples')).toBeInTheDocument()
+  })
 })
