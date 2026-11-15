@@ -1,0 +1,55 @@
+import { expect, test } from '@playwright/test'
+
+test('full grocery workflow', async ({ page }) => {
+  await page.goto('/')
+
+  // Onboarding
+  await expect(page.getByText(/set up your groceries/)).toBeVisible()
+  await page.getByLabel('Grocery items').fill('Milk, dairy\nApples, produce\nRice, pantry\nSoap, household')
+  await page.getByRole('button', { name: 'Add 4 items' }).click()
+  await expect(page.getByRole('cell', { name: 'Milk' })).toBeVisible()
+
+  // Filter
+  await page.getByRole('button', { name: 'produce', exact: true }).click()
+  await expect(page.getByRole('cell', { name: 'Apples' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Milk' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'all', exact: true }).click()
+
+  // Prices: best price shown
+  await page.getByRole('row', { name: /Milk/ }).getByRole('button', { name: 'Prices' }).click()
+  await page.getByLabel('Store').fill('Costco')
+  await page.getByLabel('Price', { exact: true }).fill('3.50')
+  await page.getByRole('button', { name: 'Save price' }).click()
+  await expect(page.getByText('$3.50 at Costco')).toBeVisible()
+  await page.getByLabel('Store').fill('Aldi')
+  await page.getByLabel('Price', { exact: true }).fill('2.75')
+  await page.getByRole('button', { name: 'Save price' }).click()
+  await expect(page.getByText('$2.75 at Aldi')).toBeVisible()
+  await page.getByRole('button', { name: 'Close' }).click()
+
+  // Inventory: have 1, want 3
+  await page.getByLabel('Milk target').fill('3')
+  await page.getByLabel('Milk quantity').fill('1')
+  await page.getByLabel('Milk quantity').blur()
+  await expect(page.getByLabel('Milk quantity')).toHaveValue('1')
+
+  // Generate list from inventory
+  await page.getByRole('button', { name: 'Shopping Lists' }).click()
+  await page.getByRole('button', { name: 'Generate from inventory' }).click()
+  await expect(page.getByRole('checkbox', { name: /Milk/ })).toBeVisible()
+  await expect(page.getByText('Estimated total: $5.50')).toBeVisible()
+
+  // Purchase updates inventory
+  await page.getByRole('checkbox').click()
+  await expect(page.getByRole('checkbox')).toBeChecked()
+  await page.getByRole('button', { name: 'Inventory', exact: true }).click()
+  await expect(page.getByLabel('Milk quantity')).toHaveValue('3')
+
+  // Manual list
+  await page.getByRole('button', { name: 'Shopping Lists' }).click()
+  await page.getByLabel('New list name').fill('Party')
+  await page.getByRole('button', { name: 'Create list' }).click()
+  await page.getByLabel('Item to add').selectOption({ label: 'Soap' })
+  await page.getByRole('button', { name: 'Add to list' }).click()
+  await expect(page.getByRole('checkbox', { name: /Soap/ })).toBeVisible()
+})
