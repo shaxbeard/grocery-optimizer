@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import Dashboard from './Dashboard'
-import Onboarding, { parseLines } from './Onboarding'
+import Onboarding from './Onboarding'
 import { api } from './api'
 
 vi.mock('./api', async (orig) => {
@@ -15,29 +15,16 @@ const item = (o) => ({ id: 1, name: 'Milk', category: 'dairy', unit: '', quantit
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('parseLines', () => {
-  it('parses names and categories, defaulting to pantry', () => {
-    expect(parseLines('Milk, Dairy\n\n Rice \nSoap, bogus')).toEqual([
-      { name: 'Milk', category: 'dairy' },
-      { name: 'Rice', category: 'pantry' },
-      { name: 'Soap', category: 'pantry' },
-    ])
-  })
-})
-
 describe('Onboarding', () => {
-  it('submits parsed items', async () => {
-    api.bulkItems.mockResolvedValue([])
-    const done = vi.fn()
-    render(<Onboarding onDone={done} />)
-    expect(screen.getByRole('button', { name: /Add 0 items/ })).toBeDisabled()
-    await userEvent.type(screen.getByLabelText('Grocery items'), 'Milk, dairy{enter}Apples, produce')
-    await userEvent.click(screen.getByRole('button', { name: 'Add 2 items' }))
-    expect(api.bulkItems).toHaveBeenCalledWith([
-      { name: 'Milk', category: 'dairy' },
-      { name: 'Apples', category: 'produce' },
-    ])
-    expect(done).toHaveBeenCalled()
+  it('adds an item with a name and category dropdown', async () => {
+    api.addItem.mockResolvedValue({})
+    const refresh = vi.fn()
+    render(<Onboarding refresh={refresh} />)
+    await userEvent.type(screen.getByLabelText('New item name'), 'Milk')
+    await userEvent.selectOptions(screen.getByLabelText('New item category'), 'dairy')
+    await userEvent.click(screen.getByRole('button', { name: 'Add item' }))
+    expect(api.addItem).toHaveBeenCalledWith({ name: 'Milk', category: 'dairy' })
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
   })
 })
 
@@ -90,5 +77,23 @@ describe('Dashboard', () => {
     await userEvent.type(screen.getByLabelText('Price'), '2.99')
     await userEvent.click(screen.getByRole('button', { name: 'Save price' }))
     expect(api.setPrice).toHaveBeenCalledWith(1, 'Costco', 2.99)
+  })
+
+  it('edits an item name and category', async () => {
+    api.updateItem.mockResolvedValue({})
+    render(<Dashboard items={[item()]} refresh={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Edit name'))
+    await userEvent.type(screen.getByLabelText('Edit name'), 'Oat milk')
+    await userEvent.selectOptions(screen.getByLabelText('Edit category'), 'pantry')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(api.updateItem).toHaveBeenCalledWith(1, { name: 'Oat milk', category: 'pantry' })
+  })
+
+  it('deletes an item', async () => {
+    api.deleteItem.mockResolvedValue(null)
+    render(<Dashboard items={[item()]} refresh={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(api.deleteItem).toHaveBeenCalledWith(1)
   })
 })

@@ -33,16 +33,6 @@ describe('items', () => {
     expect((await api.post('/api/items').send({ name: 'x', quantity: -1 })).status).toBe(400)
   })
 
-  it('bulk creates items atomically', async () => {
-    const ok = await api.post('/api/items/bulk').send({ items: [{ name: 'Rice' }, { name: 'Beans' }] })
-    expect(ok.status).toBe(201)
-    expect(ok.body).toHaveLength(2)
-    const bad = await api.post('/api/items/bulk').send({ items: [{ name: 'Eggs' }, { name: '' }] })
-    expect(bad.status).toBe(400)
-    expect((await api.get('/api/items')).body).toHaveLength(2)
-    expect((await api.post('/api/items/bulk').send({ items: [] })).status).toBe(400)
-  })
-
   it('updates partially and deletes', async () => {
     const item = await addItem()
     const updated = await api.put(`/api/items/${item.id}`).send({ quantity: 2 })

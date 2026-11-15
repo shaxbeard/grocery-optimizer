@@ -13,7 +13,6 @@ async function call(method, url, body) {
 export const api = {
   items: () => call('GET', '/api/items'),
   addItem: (item) => call('POST', '/api/items', item),
-  bulkItems: (items) => call('POST', '/api/items/bulk', { items }),
   updateItem: (id, patch) => call('PUT', `/api/items/${id}`, patch),
   deleteItem: (id) => call('DELETE', `/api/items/${id}`),
   setPrice: (id, store, price) => call('PUT', `/api/items/${id}/prices`, { store, price }),

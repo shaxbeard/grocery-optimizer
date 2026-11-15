@@ -5,8 +5,25 @@ test('full grocery workflow', async ({ page }) => {
 
   // Onboarding
   await expect(page.getByText(/set up your groceries/)).toBeVisible()
-  await page.getByLabel('Grocery items').fill('Milk, dairy\nApples, produce\nRice, pantry\nSoap, household')
-  await page.getByRole('button', { name: 'Add 4 items' }).click()
+  await page.getByLabel('New item name').fill('Milk')
+  await page.getByLabel('New item category').selectOption('dairy')
+  await page.getByRole('button', { name: 'Add item' }).click()
+  await expect(page.getByRole('cell', { name: 'Milk' })).toBeVisible()
+  for (const [name, cat] of [['Apples', 'produce'], ['Rice', 'pantry'], ['Soap', 'household'], ['Tmp', 'meat']]) {
+    await page.getByLabel('New item name').fill(name)
+    await page.getByLabel('New item category').selectOption(cat)
+    await page.getByRole('button', { name: 'Add item' }).click()
+    await expect(page.getByRole('cell', { name, exact: true })).toBeVisible()
+  }
+
+  // Edit and delete
+  await page.getByRole('row', { name: /Tmp/ }).getByRole('button', { name: 'Edit' }).click()
+  await page.getByLabel('Edit name').fill('Beef')
+  await page.getByLabel('Edit category').selectOption('meat')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('cell', { name: 'Beef' })).toBeVisible()
+  await page.getByRole('row', { name: /Beef/ }).getByRole('button', { name: 'Delete' }).click()
+  await expect(page.getByRole('cell', { name: 'Beef' })).toHaveCount(0)
   await expect(page.getByRole('cell', { name: 'Milk' })).toBeVisible()
 
   // Filter

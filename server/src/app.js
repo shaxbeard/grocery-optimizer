@@ -48,16 +48,6 @@ export function createApp(db) {
     res.status(201).json(withPrices([getItem(lastInsertRowid)])[0])
   })
 
-  app.post('/api/items/bulk', (req, res) => {
-    const { items } = req.body
-    if (!Array.isArray(items) || items.length === 0) return bad(res, 'items must be a non-empty array')
-    const parsed = items.map((i) => parseItem(i))
-    const error = parsed.find((i) => typeof i === 'string')
-    if (error) return bad(res, error)
-    db.transaction(() => parsed.forEach((i) => insertItem.run(i)))()
-    res.status(201).json(withPrices(db.prepare('SELECT * FROM items ORDER BY name').all()))
-  })
-
   app.put('/api/items/:id', (req, res) => {
     const existing = getItem(req.params.id)
     if (!existing) return res.status(404).json({ error: 'not found' })

@@ -11,7 +11,7 @@ Stack: Express 5 + better-sqlite3 (server), React + Vite (client), Vitest + Supe
 
 ## API
 
-- `GET/POST /api/items`, `PUT/DELETE /api/items/:id`, `POST /api/items/bulk` (onboarding)
+- `GET/POST /api/items`, `PUT/DELETE /api/items/:id`
 - `PUT /api/items/:id/prices` (upsert store price), `DELETE /api/prices/:id`
 - `GET/POST /api/lists`, `GET/DELETE /api/lists/:id`, `POST /api/lists/from-inventory`
 - `POST /api/lists/:id/items`, `DELETE /api/list-items/:id`
@@ -26,7 +26,7 @@ Stack: Express 5 + better-sqlite3 (server), React + Vite (client), Vitest + Supe
 
 ### 2. Backend
 - [x] SQLite schema created on startup (path configurable, `:memory:` in tests)
-- [x] Item CRUD, bulk create, category filter
+- [x] Item CRUD, category filter
 - [x] Price upsert returns best (lowest) price per item
 - [x] Shopping lists: create, generate from low stock, add/remove items
 - [x] Marking purchased increases inventory; unmarking reverts it

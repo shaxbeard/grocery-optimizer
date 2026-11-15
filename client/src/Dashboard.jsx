@@ -38,9 +38,6 @@ function Prices({ item, refresh }) {
         />
         <button className="primary">Save price</button>
       </form>
-      <button className="link danger" onClick={() => api.deleteItem(item.id).then(refresh)}>
-        Delete item
-      </button>
     </div>
   )
 }
@@ -62,12 +59,8 @@ function NumberCell({ item, field, refresh }) {
   )
 }
 
-export default function Dashboard({ items, refresh }) {
-  const [filter, setFilter] = useState('all')
-  const [open, setOpen] = useState(null)
+export function AddItemForm({ refresh }) {
   const [form, setForm] = useState({ name: '', category: 'produce' })
-
-  const shown = filter === 'all' ? items : items.filter((i) => i.category === filter)
 
   async function add(e) {
     e.preventDefault()
@@ -75,6 +68,59 @@ export default function Dashboard({ items, refresh }) {
     setForm({ ...form, name: '' })
     refresh()
   }
+
+  return (
+    <form className="card inline" onSubmit={add}>
+      <input aria-label="New item name" placeholder="New item" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+      <select aria-label="New item category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+        {CATEGORIES.map((c) => (
+          <option key={c}>{c}</option>
+        ))}
+      </select>
+      <button className="primary">Add item</button>
+    </form>
+  )
+}
+
+function EditCells({ item, refresh, onDone }) {
+  const [form, setForm] = useState({ name: item.name, category: item.category })
+  const id = `edit-${item.id}`
+
+  async function save(e) {
+    e.preventDefault()
+    await api.updateItem(item.id, form)
+    onDone()
+    refresh()
+  }
+
+  return (
+    <>
+      <td>
+        <input form={id} aria-label="Edit name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+      </td>
+      <td>
+        <select form={id} aria-label="Edit category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+          {CATEGORIES.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <form id={id} onSubmit={save} />
+      </td>
+      <td colSpan={3}></td>
+      <td>
+        <button form={id} className="link">Save</button>
+        <button type="button" className="link" onClick={onDone}>Cancel</button>
+      </td>
+    </>
+  )
+}
+
+export default function Dashboard({ items, refresh }) {
+  const [filter, setFilter] = useState('all')
+  const [open, setOpen] = useState(null)
+  const [editing, setEditing] = useState(null)
+
+  const shown = filter === 'all' ? items : items.filter((i) => i.category === filter)
 
   return (
     <>
@@ -86,15 +132,7 @@ export default function Dashboard({ items, refresh }) {
         ))}
       </div>
 
-      <form className="card inline" onSubmit={add}>
-        <input aria-label="New item name" placeholder="New item" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        <select aria-label="New item category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-          {CATEGORIES.map((c) => (
-            <option key={c}>{c}</option>
-          ))}
-        </select>
-        <button className="primary">Add item</button>
-      </form>
+      <AddItemForm refresh={refresh} />
 
       <table className="card">
         <thead>
@@ -111,6 +149,10 @@ export default function Dashboard({ items, refresh }) {
           {shown.map((item) => (
             <Fragment key={item.id}>
               <tr className={item.quantity < item.target ? 'low' : ''}>
+                {editing === item.id ? (
+                  <EditCells item={item} refresh={refresh} onDone={() => setEditing(null)} />
+                ) : (
+                  <>
                 <td>{item.name}</td>
                 <td className="muted">{item.category}</td>
                 <td><NumberCell item={item} field="quantity" refresh={refresh} /></td>
@@ -120,7 +162,11 @@ export default function Dashboard({ items, refresh }) {
                   <button className="link" onClick={() => setOpen(open === item.id ? null : item.id)}>
                     {open === item.id ? 'Close' : 'Prices'}
                   </button>
+                  <button className="link" onClick={() => setEditing(item.id)}>Edit</button>
+                  <button className="link danger" onClick={() => api.deleteItem(item.id).then(refresh)}>Delete</button>
                 </td>
+                  </>
+                )}
               </tr>
               {open === item.id && (
                 <tr>

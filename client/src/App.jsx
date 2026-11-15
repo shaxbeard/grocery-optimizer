@@ -31,7 +31,7 @@ export default function App() {
         )}
       </header>
       {items.length === 0 ? (
-        <Onboarding onDone={refresh} />
+        <Onboarding refresh={refresh} />
       ) : tab === 'dashboard' ? (
         <Dashboard items={items} refresh={refresh} />
       ) : (
