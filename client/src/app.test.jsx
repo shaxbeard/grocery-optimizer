@@ -16,14 +16,16 @@ const item = (o) => ({ id: 1, name: 'Milk', category: 'dairy', unit: '', quantit
 beforeEach(() => vi.clearAllMocks())
 
 describe('Onboarding', () => {
-  it('adds an item with a name and category dropdown', async () => {
+  it('adds an item with a name, category and package volume', async () => {
     api.addItem.mockResolvedValue({})
     const refresh = vi.fn()
     render(<Onboarding refresh={refresh} />)
     await userEvent.type(screen.getByLabelText('New item name'), 'Milk')
     await userEvent.selectOptions(screen.getByLabelText('New item category'), 'dairy')
+    await userEvent.type(screen.getByLabelText('Package size, optional'), '500')
+    await userEvent.selectOptions(screen.getByLabelText('Package unit', { exact: true }), 'mL')
     await userEvent.click(screen.getByRole('button', { name: 'Add item' }))
-    expect(api.addItem).toHaveBeenCalledWith({ name: 'Milk', category: 'dairy' })
+    expect(api.addItem).toHaveBeenCalledWith({ name: 'Milk', category: 'dairy', package_amount: 500, package_unit: 'mL' })
     await waitFor(() => expect(refresh).toHaveBeenCalled())
   })
 })
@@ -52,6 +54,7 @@ describe('Dashboard', () => {
   it('filters by category and shows best price', async () => {
     render(<Dashboard items={items} refresh={vi.fn()} />)
     expect(screen.getByText('$1.50 at Aldi')).toBeInTheDocument()
+    expect(screen.queryByText(/\/ 100 g/)).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'produce' }))
     expect(screen.queryByText('Milk')).not.toBeInTheDocument()
     expect(screen.getByText('Apples')).toBeInTheDocument()
@@ -69,25 +72,40 @@ describe('Dashboard', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled())
   })
 
-  it('saves a store price', async () => {
+  it('still shows a price per 100 g for an item measured in grams', () => {
+    render(<Dashboard items={[item({ name: 'Hummus', package_amount: 500, package_unit: 'g', best: { price: 4, store: 'Market' } })]} refresh={vi.fn()} />)
+    expect(screen.getByText('$0.80 / 100 g')).toBeInTheDocument()
+  })
+
+  it('opens item details and prices from Edit and saves a price without closing the editor', async () => {
     api.setPrice.mockResolvedValue({})
     render(<Dashboard items={[item()]} refresh={vi.fn()} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Prices' }))
+    expect(screen.queryByRole('button', { name: 'Prices' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit', exact: true }))
+    expect(screen.getByLabelText('Edit name')).toHaveValue('Milk')
     await userEvent.type(screen.getByLabelText('Store'), 'Costco')
     await userEvent.type(screen.getByLabelText('Price'), '2.99')
     await userEvent.click(screen.getByRole('button', { name: 'Save price' }))
     expect(api.setPrice).toHaveBeenCalledWith(1, 'Costco', 2.99)
+    expect(api.updateItem).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Edit name')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText('Store prices')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Edit name')).not.toBeInTheDocument()
   })
 
-  it('edits an item name and category', async () => {
+  it('edits an item name and category and can clear its package size', async () => {
     api.updateItem.mockResolvedValue({})
-    render(<Dashboard items={[item()]} refresh={vi.fn()} />)
+    render(<Dashboard items={[item({ package_amount: 0.5, package_unit: 'L' })]} refresh={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
     await userEvent.clear(screen.getByLabelText('Edit name'))
     await userEvent.type(screen.getByLabelText('Edit name'), 'Oat milk')
     await userEvent.selectOptions(screen.getByLabelText('Edit category'), 'pantry')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(api.updateItem).toHaveBeenCalledWith(1, { name: 'Oat milk', category: 'pantry' })
+    expect(screen.getByLabelText('Edit package size')).toHaveValue(0.5)
+    expect(screen.getByLabelText('Edit package unit')).toHaveValue('L')
+    await userEvent.clear(screen.getByLabelText('Edit package size'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save item' }))
+    expect(api.updateItem).toHaveBeenCalledWith(1, { name: 'Oat milk', category: 'pantry', package_amount: null, package_unit: 'L' })
   })
 
   it('deletes an item', async () => {
@@ -107,5 +125,10 @@ describe('Dashboard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'weekly purchases' }))
     expect(screen.queryByText('Milk')).not.toBeInTheDocument()
     expect(screen.getByText('Apples')).toBeInTheDocument()
+  })
+
+  it('shows a per week input for every item, weekly or not', () => {
+    render(<Dashboard items={[item({ weekly: 0, per_week: 0 })]} refresh={vi.fn()} />)
+    expect(screen.getByLabelText('Milk per week')).toHaveValue(0)
   })
 })

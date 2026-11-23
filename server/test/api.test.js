@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync, rmdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { openDb } from '../src/db.js'
@@ -15,9 +18,28 @@ describe('items', () => {
   it('creates and lists items', async () => {
     const created = await api.post('/api/items').send({ name: ' Apples ', category: 'produce' })
     expect(created.status).toBe(201)
-    expect(created.body).toMatchObject({ name: 'Apples', quantity: 0, prices: [], best: null })
+    expect(created.body).toMatchObject({ name: 'Apples', quantity: 0, package_amount: null, prices: [], best: null })
     const list = await api.get('/api/items')
     expect(list.body).toHaveLength(1)
+  })
+
+  it('saves an optional initial price as a store price', async () => {
+    const created = await api.post('/api/items').send({ name: 'Hummus', initial_price: { store: ' Aldi ', price: 0 } })
+    expect(created.status).toBe(201)
+    expect(created.body.best).toMatchObject({ store: 'Aldi', price: 0 })
+    expect((await api.get('/api/items')).body[0].prices).toEqual([created.body.best])
+  })
+
+  it('does not create an item when its initial price is invalid', async () => {
+    for (const [initial_price, error] of [
+      [{ store: ' ', price: 3.5 }, 'store is required'],
+      [{ store: 'Aldi', price: -1 }, 'price must be a non-negative number'],
+    ]) {
+      const res = await api.post('/api/items').send({ name: 'Hummus', initial_price })
+      expect(res.status).toBe(400)
+      expect(res.body.error).toBe(error)
+    }
+    expect((await api.get('/api/items')).body).toHaveLength(0)
   })
 
   it('filters by category', async () => {
@@ -39,6 +61,56 @@ describe('items', () => {
     const updated = await api.put(`/api/items/${item.id}`).send({ weekly: true, per_week: 2 })
     expect(updated.body).toMatchObject({ name: 'Milk', weekly: 1, per_week: 2 })
     expect((await api.put(`/api/items/${item.id}`).send({ per_week: -1 })).status).toBe(400)
+  })
+
+  it('stores a max buy quantity', async () => {
+    const item = await addItem()
+    expect(item.max_buy).toBe(0)
+    const updated = await api.put(`/api/items/${item.id}`).send({ max_buy: 12 })
+    expect(updated.body.max_buy).toBe(12)
+    expect((await api.put(`/api/items/${item.id}`).send({ max_buy: -1 })).status).toBe(400)
+  })
+
+  it('persists package size and unit through partial edits and lets the size be cleared', async () => {
+    const item = await addItem({ package_amount: 500, package_unit: 'mL' })
+    expect(item).toMatchObject({ package_amount: 500, package_unit: 'mL' })
+    const url = `/api/items/${item.id}`
+    expect((await api.put(url).send({ quantity: 2 })).body).toMatchObject({ package_amount: 500, package_unit: 'mL' })
+    expect((await api.put(url).send({ package_amount: 0.5, package_unit: 'L' })).status).toBe(200)
+    expect((await api.get('/api/items')).body[0]).toMatchObject({ package_amount: 0.5, package_unit: 'L' })
+    expect((await api.put(url).send({ package_amount: null })).body.package_amount).toBeNull()
+  })
+
+  it('rejects invalid sizes, unsupported units, and fractional counts', async () => {
+    const item = await addItem({ name: 'Tissues', package_amount: 6, package_unit: 'count' })
+    expect(item).toMatchObject({ package_amount: 6, package_unit: 'count' })
+    for (const fields of [
+      { package_amount: 0 }, { package_amount: -1 }, { package_amount: '500' }, { package_amount: true },
+      { package_unit: 'oz' }, { package_amount: 2.5, package_unit: 'count' },
+    ]) {
+      expect((await api.post('/api/items').send({ name: 'Tissues', ...fields })).status).toBe(400)
+      expect((await api.put(`/api/items/${item.id}`).send(fields)).status).toBe(400)
+    }
+    expect((await api.get('/api/items')).body[0]).toMatchObject({ package_amount: 6, package_unit: 'count' })
+  })
+
+  it('preserves existing gram values and store prices when opening a legacy database', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'grocery-package-units-'))
+    const path = join(dir, 'legacy.db')
+    let db
+    try {
+      db = openDb(path)
+      db.exec('ALTER TABLE items DROP COLUMN package_unit; ALTER TABLE items RENAME COLUMN package_amount TO package_grams')
+      db.exec("INSERT INTO items (name, package_grams) VALUES ('Hummus', 500); INSERT INTO prices (item_id, store, price) VALUES (1, 'Market', 3.50)")
+      db.close()
+      db = openDb(path)
+      const { body } = await request(createApp(db)).get('/api/items')
+      expect(body[0]).toMatchObject({ name: 'Hummus', package_amount: 500, package_unit: 'g', best: { store: 'Market', price: 3.5 } })
+    } finally {
+      if (db?.open) db.close()
+      rmSync(path, { force: true })
+      rmdirSync(dir)
+    }
   })
 
   it('updates partially and deletes', async () => {

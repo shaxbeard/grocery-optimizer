@@ -24,6 +24,7 @@ nav button.active { border-bottom-color: var(--blue); font-weight: 600; }
 input, select, textarea { font: inherit; padding: 6px 8px; border: 1px solid #ccd3dc; border-radius: 6px; color: var(--navy); }
 textarea { width: 100%; box-sizing: border-box; margin-bottom: 12px; }
 td input[type='number'] { width: 70px; }
+input.package-size { width: 6rem; }
 button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #ccd3dc; background: #fff; color: var(--navy); cursor: pointer; }
 button.primary { background: var(--purple); border-color: var(--purple); color: #fff; }
 button.primary:disabled { opacity: 0.5; cursor: default; }

@@ -1,9 +1,17 @@
 import express from 'express'
+import { PACKAGE_UNITS } from '../../shared/packageUnits.js'
 
 export const CATEGORIES = ['produce', 'dairy', 'meat', 'pantry', 'freezer', 'household']
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0
 const bad = (res, message) => res.status(400).json({ error: message })
+
+function parsePrice(body) {
+  const store = typeof body?.store === 'string' ? body.store.trim() : ''
+  if (!store) return 'store is required'
+  if (!isNum(body.price)) return 'price must be a non-negative number'
+  return { store, price: body.price }
+}
 
 export function createApp(db) {
   const app = express()
@@ -20,20 +28,40 @@ export function createApp(db) {
   }
 
   function parseItem(body, existing = {}) {
-    const item = { name: '', category: 'pantry', unit: '', quantity: 0, target: 0, weekly: 0, per_week: 0, ...existing, ...body }
+    const item = { name: '', category: 'pantry', unit: '', quantity: 0, target: 0, weekly: 0, per_week: 0, max_buy: 0, package_amount: null, package_unit: 'g', ...existing, ...body }
     item.name = String(item.name).trim()
     if (!item.name) return 'name is required'
     if (!CATEGORIES.includes(item.category)) return 'invalid category'
-    if (!isNum(item.quantity) || !isNum(item.target) || !isNum(item.per_week)) {
-      return 'quantity, target and per_week must be non-negative numbers'
+    if (!isNum(item.quantity) || !isNum(item.target) || !isNum(item.per_week) || !isNum(item.max_buy)) {
+      return 'quantity, target, per_week and max_buy must be non-negative numbers'
+    }
+    if (typeof item.package_unit !== 'string' || !Object.hasOwn(PACKAGE_UNITS, item.package_unit)) {
+      return 'Package unit must be grams, millilitres, litres or count'
+    }
+    if (item.package_amount !== null) {
+      if (!isNum(item.package_amount) || item.package_amount === 0) {
+        return 'Package size must be a positive number or left blank'
+      }
+      if (item.package_unit === 'count' && !Number.isSafeInteger(item.package_amount)) {
+        return 'Package count must be a whole number'
+      }
     }
     item.weekly = item.weekly ? 1 : 0
     return item
   }
 
   const insertItem = db.prepare(
-    'INSERT INTO items (name, category, unit, quantity, target, weekly, per_week) VALUES (@name, @category, @unit, @quantity, @target, @weekly, @per_week)'
+    'INSERT INTO items (name, category, unit, quantity, target, weekly, per_week, max_buy, package_amount, package_unit) VALUES (@name, @category, @unit, @quantity, @target, @weekly, @per_week, @max_buy, @package_amount, @package_unit)'
   )
+  const upsertPrice = db.prepare(
+    `INSERT INTO prices (item_id, store, price) VALUES (?, ?, ?)
+     ON CONFLICT (item_id, store) DO UPDATE SET price = excluded.price, updated_at = CURRENT_TIMESTAMP`
+  )
+  const createItem = db.transaction((item, initialPrice) => {
+    const { lastInsertRowid } = insertItem.run(item)
+    if (initialPrice) upsertPrice.run(lastInsertRowid, initialPrice.store, initialPrice.price)
+    return getItem(lastInsertRowid)
+  })
 
   // Items
   app.get('/api/items', (req, res) => {
@@ -45,10 +73,12 @@ export function createApp(db) {
   })
 
   app.post('/api/items', (req, res) => {
-    const item = parseItem(req.body)
+    const { initial_price, ...fields } = req.body ?? {}
+    const item = parseItem(fields)
     if (typeof item === 'string') return bad(res, item)
-    const { lastInsertRowid } = insertItem.run(item)
-    res.status(201).json(withPrices([getItem(lastInsertRowid)])[0])
+    const initialPrice = initial_price === undefined ? null : parsePrice(initial_price)
+    if (typeof initialPrice === 'string') return bad(res, initialPrice)
+    res.status(201).json(withPrices([createItem(item, initialPrice)])[0])
   })
 
   app.put('/api/items/:id', (req, res) => {
@@ -57,7 +87,7 @@ export function createApp(db) {
     const item = parseItem(req.body, existing)
     if (typeof item === 'string') return bad(res, item)
     db.prepare(
-      'UPDATE items SET name = @name, category = @category, unit = @unit, quantity = @quantity, target = @target, weekly = @weekly, per_week = @per_week WHERE id = @id'
+      'UPDATE items SET name = @name, category = @category, unit = @unit, quantity = @quantity, target = @target, weekly = @weekly, per_week = @per_week, max_buy = @max_buy, package_amount = @package_amount, package_unit = @package_unit WHERE id = @id'
     ).run({ ...item, id: existing.id })
     res.json(withPrices([getItem(existing.id)])[0])
   })
@@ -71,14 +101,9 @@ export function createApp(db) {
   app.put('/api/items/:id/prices', (req, res) => {
     const item = getItem(req.params.id)
     if (!item) return res.status(404).json({ error: 'not found' })
-    const store = String(req.body.store ?? '').trim()
-    const { price } = req.body
-    if (!store) return bad(res, 'store is required')
-    if (!isNum(price)) return bad(res, 'price must be a non-negative number')
-    db.prepare(
-      `INSERT INTO prices (item_id, store, price) VALUES (?, ?, ?)
-       ON CONFLICT (item_id, store) DO UPDATE SET price = excluded.price, updated_at = CURRENT_TIMESTAMP`
-    ).run(item.id, store, price)
+    const price = parsePrice(req.body)
+    if (typeof price === 'string') return bad(res, price)
+    upsertPrice.run(item.id, price.store, price.price)
     res.json(withPrices([item])[0])
   })
 
