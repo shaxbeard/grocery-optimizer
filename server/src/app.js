@@ -17,7 +17,7 @@ function parsePrice(body) {
 export function createApp(db, { behindHttpsProxy = false } = {}) {
   const app = express()
   if (behindHttpsProxy) {
-    app.set('trust proxy', 'loopback')
+    app.set('trust proxy', process.env.RENDER === 'true' ? 1 : 'loopback')
     app.use((req, res, next) => {
       if (!req.secure) return res.status(403).json({ error: 'HTTPS is required' })
       next()

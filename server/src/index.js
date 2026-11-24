@@ -9,4 +9,5 @@ app.use(express.static(dist))
 app.get('/{*splat}', (req, res) => res.sendFile(dist + '/index.html'))
 
 const port = process.env.PORT ?? 3001
-app.listen(port, '127.0.0.1', () => console.log(`Grocery Manager running at http://localhost:${port}`))
+const host = process.env.RENDER === 'true' ? '0.0.0.0' : '127.0.0.1'
+app.listen(port, host, () => console.log(`Grocery Manager listening on ${host}:${port}`))
