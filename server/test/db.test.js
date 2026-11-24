@@ -5,7 +5,7 @@ import { openDb } from '../src/db.js'
 
 vi.mock('better-sqlite3', () => ({
   default: vi.fn(function () {
-    this.pragma = vi.fn(() => ['weekly', 'max_buy', 'package_amount', 'package_unit'].map((name) => ({ name })))
+    this.pragma = vi.fn(() => ['weekly', 'max_buy', 'package_amount', 'package_unit', 'user_id'].map((name) => ({ name })))
     this.exec = vi.fn()
   }),
 }))

@@ -199,14 +199,26 @@ function EditCells({ item, refresh, onDone }) {
 }
 
 export default function Dashboard({ items, refresh }) {
+  const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [editing, setEditing] = useState(null)
   const [weeklyOnly, setWeeklyOnly] = useState(false)
 
-  const shown = items.filter((i) => (filter === 'all' || i.category === filter) && (!weeklyOnly || i.weekly))
+  const query = search.trim().toLowerCase()
+  const shown = items.filter((item) =>
+    (filter === 'all' || item.category === filter) &&
+    (!weeklyOnly || item.weekly) &&
+    item.name.toLowerCase().includes(query)
+  )
 
   return (
     <>
+      <div className="filters">
+        <label className="inline">
+          Search items
+          <input type="search" placeholder="Item name" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </label>
+      </div>
       <div className="filters" role="group" aria-label="Category filter">
         {['all', ...CATEGORIES].map((c) => (
           <button key={c} className={filter === c ? 'chip active' : 'chip'} onClick={() => setFilter(c)}>
@@ -240,6 +252,9 @@ export default function Dashboard({ items, refresh }) {
           </tr>
         </thead>
         <tbody>
+          {shown.length === 0 && (
+            <tr><td colSpan={9} className="muted">No items match your filters.</td></tr>
+          )}
           {shown.map((item) => (
             <Fragment key={item.id}>
               <tr className={item.quantity < item.target ? 'low' : ''}>

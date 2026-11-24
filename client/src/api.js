@@ -1,16 +1,26 @@
-export const CATEGORIES = ['produce', 'dairy', 'meat', 'pantry', 'freezer', 'household']
+export const CATEGORIES = ['produce', 'fridge', 'meat', 'pantry', 'freezer', 'household']
 
 async function call(method, url, body) {
   const res = await fetch(url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: {
+      ...(body && { 'Content-Type': 'application/json' }),
+      ...(method !== 'GET' && { 'X-Grocery-Request': '1' }),
+    },
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
+  if (!res.ok) {
+    if (res.status === 401 && !url.startsWith('/api/auth/')) window.dispatchEvent(new Event('grocery:session-expired'))
+    throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
+  }
   return res.status === 204 ? null : res.json()
 }
 
 export const api = {
+  session: () => call('GET', '/api/auth/session'),
+  signup: (credentials) => call('POST', '/api/auth/signup', credentials),
+  login: (credentials) => call('POST', '/api/auth/login', credentials),
+  logout: () => call('POST', '/api/auth/logout'),
   items: () => call('GET', '/api/items'),
   addItem: (item) => call('POST', '/api/items', item),
   updateItem: (id, patch) => call('PUT', `/api/items/${id}`, patch),

@@ -1,12 +1,22 @@
 import { expect, test } from '@playwright/test'
+import { randomBytes } from 'node:crypto'
 
 test('full grocery workflow', async ({ page }) => {
   await page.goto('/')
+  const password = randomBytes(20).toString('hex')
+  async function createAccount(username) {
+    await page.getByRole('button', { name: 'Create an account', exact: true }).click()
+    await page.getByLabel('Username').fill(username)
+    await page.getByLabel('Password').fill(password)
+    await page.getByRole('button', { name: 'Create account', exact: true }).click()
+    await expect(page.getByText(/set up your groceries/)).toBeVisible()
+  }
+  await createAccount('first-shopper')
 
   // Onboarding
   await expect(page.getByText(/set up your groceries/)).toBeVisible()
   await page.getByLabel('New item name').fill('Milk')
-  await page.getByLabel('New item category').selectOption('dairy')
+  await page.getByLabel('New item category').selectOption('fridge')
   const packageSize = page.getByLabel('Package size, optional')
   const packageUnit = page.getByLabel('Package unit', { exact: true })
   await packageSize.fill('500')
@@ -64,7 +74,21 @@ test('full grocery workflow', async ({ page }) => {
   await expect(page.getByLabel('Apples per week')).toHaveValue('4')
   await page.getByRole('button', { name: 'all items' }).click()
 
-  // Filter
+  // Filter by name as you type; clearing the search restores the list.
+  const search = page.getByRole('searchbox', { name: 'Search items' })
+  await search.pressSequentially('TISS')
+  await expect(tissue).toBeVisible()
+  await expect(milk).toHaveCount(0)
+  await search.fill('no matching grocery item')
+  await expect(page.getByText('No items match your filters.')).toBeVisible()
+  await search.clear()
+  await expect(milk).toBeVisible()
+  await expect(tissue).toBeVisible()
+
+  // Filter by category
+  await page.getByRole('button', { name: 'fridge', exact: true }).click()
+  await expect(milk).toBeVisible()
+  await expect(tissue).toHaveCount(0)
   await page.getByRole('button', { name: 'produce', exact: true }).click()
   await expect(page.getByRole('cell', { name: 'Apples', exact: true })).toBeVisible()
   await expect(milk).toHaveCount(0)
@@ -119,4 +143,12 @@ test('full grocery workflow', async ({ page }) => {
   await page.getByLabel('Item to add').selectOption({ label: 'Soap' })
   await page.getByRole('button', { name: 'Add to list' }).click()
   await expect(page.getByRole('checkbox', { name: /Soap/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await createAccount('second-shopper')
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await page.getByLabel('Username').fill('first-shopper')
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(milk).toBeVisible()
 })

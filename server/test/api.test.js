@@ -2,17 +2,33 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync, rmdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createHash, randomBytes } from 'node:crypto'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { openDb } from '../src/db.js'
+import { claimLegacy } from '../src/claim-legacy.js'
 
-let api
+function authenticated(app, db) {
+  const username = randomBytes(8).toString('hex')
+  const { lastInsertRowid: id } = db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run(username, '')
+  const token = randomBytes(32).toString('hex')
+  db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
+    .run(createHash('sha256').update(token).digest('hex'), id, Date.now() + 60_000)
+  const agent = request.agent(app)
+    .set('Cookie', `grocery_session=${token}`)
+    .set('X-Grocery-Request', '1')
+  return { agent, username, id }
+}
+
+let api, app, db
 beforeEach(() => {
-  api = request(createApp(openDb(':memory:')))
+  db = openDb(':memory:')
+  app = createApp(db)
+  api = authenticated(app, db).agent
 })
 
 const addItem = async (body = {}) =>
-  (await api.post('/api/items').send({ name: 'Milk', category: 'dairy', quantity: 1, target: 3, ...body })).body
+  (await api.post('/api/items').send({ name: 'Milk', category: 'fridge', quantity: 1, target: 3, ...body })).body
 
 describe('items', () => {
   it('creates and lists items', async () => {
@@ -100,17 +116,71 @@ describe('items', () => {
     let db
     try {
       db = openDb(path)
-      db.exec('ALTER TABLE items DROP COLUMN package_unit; ALTER TABLE items RENAME COLUMN package_amount TO package_grams')
-      db.exec("INSERT INTO items (name, package_grams) VALUES ('Hummus', 500); INSERT INTO prices (item_id, store, price) VALUES (1, 'Market', 3.50)")
+      db.exec('ALTER TABLE items DROP COLUMN package_unit; ALTER TABLE items RENAME COLUMN package_amount TO package_grams; ALTER TABLE items DROP COLUMN user_id; ALTER TABLE lists DROP COLUMN user_id')
+      db.exec("INSERT INTO items (name, category, package_grams) VALUES ('Hummus', 'dairy', 500); INSERT INTO prices (item_id, store, price) VALUES (1, 'Market', 3.50)")
+      db.exec("INSERT INTO lists (name) VALUES ('Legacy list'); INSERT INTO list_items (list_id, item_id, purchased) VALUES (1, 1, 1)")
       db.close()
       db = openDb(path)
-      const { body } = await request(createApp(db)).get('/api/items')
-      expect(body[0]).toMatchObject({ name: 'Hummus', package_amount: 500, package_unit: 'g', best: { store: 'Market', price: 3.5 } })
+      const app = createApp(db)
+      const owner = authenticated(app, db)
+      const other = authenticated(app, db)
+      expect((await owner.agent.get('/api/items')).body).toEqual([])
+      expect((await other.agent.get('/api/lists')).body).toEqual([])
+      expect(claimLegacy(db, owner.username)).toEqual({ items: 1, lists: 1 })
+      expect(() => claimLegacy(db, other.username)).toThrow('No unassigned data remains')
+      const { body } = await owner.agent.get('/api/items?category=fridge')
+      expect(body).toHaveLength(1)
+      expect(body[0]).toMatchObject({ name: 'Hummus', category: 'fridge', package_amount: 500, package_unit: 'g', best: { store: 'Market', price: 3.5 } })
+      expect((await owner.agent.get('/api/lists/1')).body.items[0]).toMatchObject({ name: 'Hummus', purchased: true })
+      expect((await other.agent.get('/api/items')).body).toEqual([])
     } finally {
       if (db?.open) db.close()
       rmSync(path, { force: true })
       rmdirSync(dir)
     }
+  })
+
+  describe('account isolation', () => {
+    it('requires a session and scopes inventory, prices and lists to the signed-in account', async () => {
+      const anonymous = request(app)
+      expect((await anonymous.get('/api/items')).status).toBe(401)
+      expect((await anonymous.post('/api/lists/from-inventory').set('X-Grocery-Request', '1')).status).toBe(401)
+
+      const other = authenticated(app, db)
+      const item = await addItem({ initial_price: { store: 'Market', price: 4 }, user_id: other.id })
+      const list = (await api.post('/api/lists/from-inventory')).body
+      const entry = list.items[0].list_item_id
+      expect((await other.agent.get('/api/items?category=fridge')).body).toEqual([])
+      expect((await other.agent.get('/api/lists')).body).toEqual([])
+      expect((await other.agent.get(`/api/lists/${list.id}`)).status).toBe(404)
+      expect((await other.agent.put(`/api/items/${item.id}`).send({ name: 'Other' })).status).toBe(404)
+      expect((await other.agent.put(`/api/items/${item.id}/prices`).send({ store: 'Market', price: 1 })).status).toBe(404)
+      const otherList = (await other.agent.post('/api/lists/from-inventory')).body
+      expect(otherList.items).toEqual([])
+      expect((await other.agent.post(`/api/lists/${otherList.id}/items`).send({ item_id: item.id })).status).toBe(400)
+      expect((await other.agent.put(`/api/list-items/${entry}/purchased`).send({ purchased: true })).status).toBe(404)
+      await other.agent.delete(`/api/list-items/${entry}`)
+      await other.agent.delete(`/api/prices/${item.best.id}`)
+      await other.agent.delete(`/api/lists/${list.id}`)
+      await other.agent.delete(`/api/items/${item.id}`)
+      expect((await api.get('/api/items')).body[0]).toMatchObject({ name: 'Milk', quantity: 1, best: { price: 4 } })
+      expect((await api.get(`/api/lists/${list.id}`)).body.items[0]).toMatchObject({ purchased: false })
+    })
+
+    it('protects mutations and invalidates the session token at sign-out', async () => {
+      const credentials = { username: 'local-user', password: randomBytes(20).toString('hex') }
+      expect((await request(app).post('/api/auth/signup').send(credentials)).status).toBe(403)
+      const signup = await request(app).post('/api/auth/signup').set('X-Grocery-Request', '1').send(credentials)
+      expect(signup.status).toBe(201)
+      expect(signup.body.user).toEqual({ id: expect.any(Number), username: credentials.username })
+      expect(signup.headers['set-cookie'][0]).toContain('HttpOnly; SameSite=Strict')
+      const cookie = signup.headers['set-cookie'][0].split(';')[0]
+      expect((await request(app).get('/api/items').set('Cookie', cookie)).status).toBe(200)
+      expect((await request(app).post('/api/auth/logout').set('Cookie', cookie).set('X-Grocery-Request', '1')).status).toBe(204)
+      expect((await request(app).get('/api/items').set('Cookie', cookie)).status).toBe(401)
+      expect((await request(app).post('/api/auth/login').set('X-Grocery-Request', '1').send({ ...credentials, password: 'not the password' })).status).toBe(401)
+      expect((await request(app).post('/api/auth/login').set('X-Grocery-Request', '1').send(credentials)).status).toBe(200)
+    })
   })
 
   it('updates partially and deletes', async () => {

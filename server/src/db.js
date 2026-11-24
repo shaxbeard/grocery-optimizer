@@ -1,10 +1,20 @@
 import Database from 'better-sqlite3'
 import { fileURLToPath } from 'node:url'
 
-export function openDb(path = fileURLToPath(new URL('../../grocery.db', import.meta.url))) {
-  const db = new Database(path)
+export function openDb(path = fileURLToPath(new URL('../../grocery.db', import.meta.url)), options) {
+  const db = options ? new Database(path, options) : new Database(path)
   db.pragma('foreign_keys = ON')
   db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
@@ -16,7 +26,8 @@ export function openDb(path = fileURLToPath(new URL('../../grocery.db', import.m
       per_week REAL NOT NULL DEFAULT 0,
       max_buy REAL NOT NULL DEFAULT 0,
       package_amount REAL CHECK (package_amount > 0),
-      package_unit TEXT NOT NULL DEFAULT 'g' CHECK (package_unit IN ('g', 'mL', 'L', 'count'))
+      package_unit TEXT NOT NULL DEFAULT 'g' CHECK (package_unit IN ('g', 'mL', 'L', 'count')),
+      user_id INTEGER REFERENCES users(id)
     );
     CREATE TABLE IF NOT EXISTS prices (
       id INTEGER PRIMARY KEY,
@@ -29,7 +40,8 @@ export function openDb(path = fileURLToPath(new URL('../../grocery.db', import.m
     CREATE TABLE IF NOT EXISTS lists (
       id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      user_id INTEGER REFERENCES users(id)
     );
     CREATE TABLE IF NOT EXISTS list_items (
       id INTEGER PRIMARY KEY,
@@ -60,5 +72,12 @@ export function openDb(path = fileURLToPath(new URL('../../grocery.db', import.m
       }
     })()
   }
+  if (!columns.includes('user_id')) {
+    db.exec('ALTER TABLE items ADD COLUMN user_id INTEGER REFERENCES users(id)')
+  }
+  if (!db.pragma('table_info(lists)').some((c) => c.name === 'user_id')) {
+    db.exec('ALTER TABLE lists ADD COLUMN user_id INTEGER REFERENCES users(id)')
+  }
+  db.exec("UPDATE items SET category = 'fridge' WHERE category = 'dairy'")
   return db
 }

@@ -11,7 +11,7 @@ vi.mock('./api', async (orig) => {
   return { ...real, api: Object.fromEntries(Object.keys(real.api).map((k) => [k, vi.fn()])) }
 })
 
-const item = (o) => ({ id: 1, name: 'Milk', category: 'dairy', unit: '', quantity: 1, target: 3, prices: [], best: null, ...o })
+const item = (o) => ({ id: 1, name: 'Milk', category: 'fridge', unit: '', quantity: 1, target: 3, prices: [], best: null, ...o })
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -21,23 +21,32 @@ describe('Onboarding', () => {
     const refresh = vi.fn()
     render(<Onboarding refresh={refresh} />)
     await userEvent.type(screen.getByLabelText('New item name'), 'Milk')
-    await userEvent.selectOptions(screen.getByLabelText('New item category'), 'dairy')
+    await userEvent.selectOptions(screen.getByLabelText('New item category'), 'fridge')
     await userEvent.type(screen.getByLabelText('Package size, optional'), '500')
     await userEvent.selectOptions(screen.getByLabelText('Package unit', { exact: true }), 'mL')
     await userEvent.click(screen.getByRole('button', { name: 'Add item' }))
-    expect(api.addItem).toHaveBeenCalledWith({ name: 'Milk', category: 'dairy', package_amount: 500, package_unit: 'mL' })
+    expect(api.addItem).toHaveBeenCalledWith({ name: 'Milk', category: 'fridge', package_amount: 500, package_unit: 'mL' })
     await waitFor(() => expect(refresh).toHaveBeenCalled())
   })
 })
 
 describe('App', () => {
+  it('shows sign-in and does not fetch inventory without a session', async () => {
+    api.session.mockResolvedValue({ user: null })
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(api.items).not.toHaveBeenCalled()
+  })
+
   it('shows onboarding when there are no items', async () => {
+    api.session.mockResolvedValue({ user: { id: 1, username: 'user' } })
     api.items.mockResolvedValue([])
     render(<App />)
     expect(await screen.findByText(/set up your groceries/)).toBeInTheDocument()
   })
 
   it('shows the dashboard when items exist', async () => {
+    api.session.mockResolvedValue({ user: { id: 1, username: 'user' } })
     api.items.mockResolvedValue([item()])
     render(<App />)
     expect(await screen.findByText('Milk')).toBeInTheDocument()
@@ -58,6 +67,32 @@ describe('Dashboard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'produce' }))
     expect(screen.queryByText('Milk')).not.toBeInTheDocument()
     expect(screen.getByText('Apples')).toBeInTheDocument()
+  })
+
+  it('matches partial names regardless of case and combines search with the other filters', async () => {
+    render(<Dashboard items={[
+      item({ name: 'Oat milk', weekly: 1 }),
+      item({ id: 2, name: 'Almond milk', category: 'pantry', weekly: 1 }),
+      item({ id: 3, name: 'Milk chocolate' }),
+      item({ id: 4, name: 'Eggs', weekly: 1 }),
+    ]} refresh={vi.fn()} />)
+    const search = screen.getByRole('searchbox', { name: 'Search items' })
+    await userEvent.type(search, ' MIL ')
+    expect(screen.getByText('Oat milk')).toBeInTheDocument()
+    expect(screen.getByText('Almond milk')).toBeInTheDocument()
+    expect(screen.getByText('Milk chocolate')).toBeInTheDocument()
+    expect(screen.queryByText('Eggs')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'fridge' }))
+    await userEvent.click(screen.getByRole('button', { name: 'weekly purchases' }))
+    expect(screen.getByText('Oat milk')).toBeInTheDocument()
+    expect(screen.queryByText('Almond milk')).not.toBeInTheDocument()
+    expect(screen.queryByText('Milk chocolate')).not.toBeInTheDocument()
+    expect(screen.queryByText('Eggs')).not.toBeInTheDocument()
+
+    await userEvent.clear(search)
+    expect(screen.getByText('Eggs')).toBeInTheDocument()
+    expect(screen.queryByText('Almond milk')).not.toBeInTheDocument()
   })
 
   it('updates inventory quantity on blur', async () => {
