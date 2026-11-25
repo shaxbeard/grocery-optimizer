@@ -15,11 +15,31 @@ const item = (o) => ({ id: 1, name: 'Milk', category: 'fridge', unit: '', quanti
 
 beforeEach(() => vi.clearAllMocks())
 
+describe('Adding items', () => {
+  it.each([
+    ['onboarding', Onboarding],
+    ['inventory', Dashboard],
+  ])('reveals the fields only after clicking Add new item in %s', async (_view, Component) => {
+    render(<Component items={[item()]} refresh={vi.fn()} />)
+    expect(screen.queryByLabelText('New item name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add item', exact: true })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add new item', exact: true }))
+    expect(screen.getByLabelText('New item name')).toBeVisible()
+    expect(screen.getByLabelText('New item category')).toBeVisible()
+    expect(screen.getByLabelText('Package size, optional')).toBeVisible()
+    expect(screen.getByLabelText('Package unit', { exact: true })).toBeVisible()
+    expect(screen.getByLabelText('Package price (optional)')).toBeVisible()
+    expect(screen.getByLabelText('Store (required with price)')).toBeVisible()
+    expect(api.addItem).not.toHaveBeenCalled()
+  })
+})
+
 describe('Onboarding', () => {
   it('adds an item with a name, category and package volume', async () => {
     api.addItem.mockResolvedValue({})
     const refresh = vi.fn()
     render(<Onboarding refresh={refresh} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Add new item', exact: true }))
     await userEvent.type(screen.getByLabelText('New item name'), 'Milk')
     await userEvent.selectOptions(screen.getByLabelText('New item category'), 'fridge')
     await userEvent.type(screen.getByLabelText('Package size, optional'), '500')

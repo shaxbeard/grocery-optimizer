@@ -6,7 +6,7 @@ Type any part of an item name in **Search items** to filter the inventory alongs
 The **Fridge** category replaces **Dairy**; existing items move automatically.
 
 Set an optional package size in grams, millilitres, litres, or item count. The app uses that size for all of the item's store prices and shows the cost per 100 g, per litre, or per item.
-When adding an item, you can also enter its first package price. A store is required only if you enter a price.
+Click **Add new item** to reveal the entry fields. You can also enter its first package price. A store is required only if you enter a price.
 Use **Edit** on an inventory row to update item details or manage store prices. **Save item** and **Save price** save their respective changes separately.
 
 ```

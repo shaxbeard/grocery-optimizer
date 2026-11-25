@@ -15,6 +15,8 @@ test('full grocery workflow', async ({ page }) => {
 
   // Onboarding
   await expect(page.getByText(/set up your groceries/)).toBeVisible()
+  await expect(page.getByLabel('New item name')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Add new item', exact: true }).click()
   await page.getByLabel('New item name').fill('Milk')
   await page.getByLabel('New item category').selectOption('fridge')
   const packageSize = page.getByLabel('Package size, optional')
@@ -32,6 +34,8 @@ test('full grocery workflow', async ({ page }) => {
   await expect(milk.getByText('500 mL', { exact: true })).toBeVisible()
   await expect(milk.getByText('$3.50 at Costco')).toBeVisible()
   await expect(milk.getByText('$7.00 / L', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('New item name')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Add new item', exact: true }).click()
   await expect(packageSize).toBeEmpty()
   await expect(initialPrice).toBeEmpty()
   await expect(initialStore).toBeEmpty()

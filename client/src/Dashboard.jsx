@@ -101,6 +101,7 @@ function PackageSizeInput({ size, onChange, form }) {
 const packageAmount = (size) => size === '' ? null : Number(size)
 
 export function AddItemForm({ refresh }) {
+  const [expanded, setExpanded] = useState(false)
   const [form, setForm] = useState({ name: '', category: 'produce', package_amount: '', package_unit: 'g' })
   const [price, setPrice] = useState('')
   const [store, setStore] = useState('')
@@ -122,6 +123,14 @@ export function AddItemForm({ refresh }) {
     setPrice('')
     setStore('')
     refresh()
+  }
+
+  if (!expanded) {
+    return (
+      <div className="card">
+        <button type="button" className="primary" onClick={() => setExpanded(true)}>Add new item</button>
+      </div>
+    )
   }
 
   return (

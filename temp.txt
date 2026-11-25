@@ -1,0 +1,2 @@
+ssh srv-dc2pcfrncjis73dl16q0@ssh.oregon.render.com
+scp grocery-import.db srv-dc2pcfrncjis73dl16q0@ssh.oregon.render.com:/var/data/grocery-import.db
