@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import Dashboard from './Dashboard'
 import Onboarding from './Onboarding'
+import DealChecker from './DealChecker'
 import { api } from './api'
 
 vi.mock('./api', async (orig) => {
@@ -21,6 +22,12 @@ describe('Adding items', () => {
     ['inventory', Dashboard],
   ])('reveals the fields only after clicking Add new item in %s', async (_view, Component) => {
     render(<Component items={[item()]} refresh={vi.fn()} />)
+    const checker = screen.getByRole('button', { name: 'Deal Checker', exact: true })
+    expect(checker).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByLabelText('Deal price')).not.toBeInTheDocument()
+    await userEvent.click(checker)
+    expect(checker).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByLabelText('Deal price')).toBeVisible()
     expect(screen.queryByLabelText('New item name')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add item', exact: true })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Add new item', exact: true }))
@@ -30,7 +37,52 @@ describe('Adding items', () => {
     expect(screen.getByLabelText('Package unit', { exact: true })).toBeVisible()
     expect(screen.getByLabelText('Package price (optional)')).toBeVisible()
     expect(screen.getByLabelText('Store (required with price)')).toBeVisible()
+    await userEvent.click(checker)
+    expect(screen.queryByLabelText('Deal price')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('New item name')).toBeVisible()
     expect(api.addItem).not.toHaveBeenCalled()
+  })
+})
+
+describe('Deal Checker', () => {
+  it.each([
+    ['g', '500', '$0.80 / 100 g'],
+    ['kg', '0.5', '$0.80 / 100 g'],
+    ['mL', '250', '$1.60 / 100 mL'],
+    ['L', '0.25', '$1.60 / 100 mL'],
+    ['g', '300', '$1.33 / 100 g'],
+    ['mL', '150', '$2.67 / 100 mL'],
+    ['count', '8', '$0.50 each'],
+  ])('calculates the live unit price for %s without saving', async (unit, quantity, expected) => {
+    render(<DealChecker />)
+    await userEvent.type(screen.getByLabelText('Deal price'), '4')
+    await userEvent.selectOptions(screen.getByLabelText('Deal unit'), unit)
+    await userEvent.type(screen.getByLabelText('Deal quantity'), quantity)
+    expect(screen.getByRole('status')).toHaveTextContent(expected)
+    await userEvent.clear(screen.getByLabelText('Deal price'))
+    expect(screen.getByRole('status')).not.toHaveTextContent(expected)
+    expect(api.addItem).not.toHaveBeenCalled()
+    expect(api.setPrice).not.toHaveBeenCalled()
+  })
+
+  it('rejects zero or negative quantities and negative prices, but accepts a free item', async () => {
+    render(<DealChecker />)
+    const price = screen.getByLabelText('Deal price')
+    const quantity = screen.getByLabelText('Deal quantity')
+    await userEvent.type(price, '-1')
+    await userEvent.type(quantity, '0')
+    expect(screen.getByRole('alert')).toHaveTextContent('Quantity must be greater than zero.')
+    expect(screen.getByRole('status')).not.toHaveTextContent('$')
+    await userEvent.clear(quantity)
+    await userEvent.type(quantity, '-2')
+    expect(screen.getByRole('status')).not.toHaveTextContent('$')
+    await userEvent.clear(quantity)
+    await userEvent.type(quantity, '500')
+    expect(screen.getByRole('alert')).toHaveTextContent('Price must be zero or more.')
+    await userEvent.clear(price)
+    await userEvent.type(price, '0')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('$0.00 / 100 g')
   })
 })
 
@@ -130,6 +182,14 @@ describe('Dashboard', () => {
   it('still shows a price per 100 g for an item measured in grams', () => {
     render(<Dashboard items={[item({ name: 'Hummus', package_amount: 500, package_unit: 'g', best: { price: 4, store: 'Market' } })]} refresh={vi.fn()} />)
     expect(screen.getByText('$0.80 / 100 g')).toBeInTheDocument()
+  })
+
+  it.each([
+    [250, 'mL'],
+    [0.25, 'L'],
+  ])('shows a price per 100 mL for a %s %s package', (package_amount, package_unit) => {
+    render(<Dashboard items={[item({ name: 'Salad dressing', package_amount, package_unit, best: { price: 4, store: 'Market' } })]} refresh={vi.fn()} />)
+    expect(screen.getByText('$1.60 / 100 mL')).toBeInTheDocument()
   })
 
   it('opens item details and prices from Edit and saves a price without closing the editor', async () => {

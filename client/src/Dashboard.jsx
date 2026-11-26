@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react'
 import { PACKAGE_UNITS } from '../../shared/packageUnits.js'
 import { api, CATEGORIES, money } from './api'
+import DealChecker from './DealChecker'
 
 function UnitPrice({ price, item }) {
   if (item.package_amount == null) return null
@@ -100,8 +101,23 @@ function PackageSizeInput({ size, onChange, form }) {
 
 const packageAmount = (size) => size === '' ? null : Number(size)
 
-export function AddItemForm({ refresh }) {
-  const [expanded, setExpanded] = useState(false)
+export function ItemTools({ refresh }) {
+  const [adding, setAdding] = useState(false)
+  const [checking, setChecking] = useState(false)
+
+  return (
+    <>
+      <div className="card inline">
+        <button type="button" className="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>Add new item</button>
+        <button type="button" aria-expanded={checking} onClick={() => setChecking(!checking)}>Deal Checker</button>
+      </div>
+      {checking && <DealChecker />}
+      {adding && <AddItemForm refresh={refresh} />}
+    </>
+  )
+}
+
+function AddItemForm({ refresh }) {
   const [form, setForm] = useState({ name: '', category: 'produce', package_amount: '', package_unit: 'g' })
   const [price, setPrice] = useState('')
   const [store, setStore] = useState('')
@@ -123,14 +139,6 @@ export function AddItemForm({ refresh }) {
     setPrice('')
     setStore('')
     refresh()
-  }
-
-  if (!expanded) {
-    return (
-      <div className="card">
-        <button type="button" className="primary" onClick={() => setExpanded(true)}>Add new item</button>
-      </div>
-    )
   }
 
   return (
@@ -244,7 +252,7 @@ export default function Dashboard({ items, refresh }) {
         </button>
       </div>
 
-      <AddItemForm refresh={refresh} />
+      <ItemTools refresh={refresh} />
 
       <table className="card">
         <thead>
@@ -253,7 +261,7 @@ export default function Dashboard({ items, refresh }) {
             <th>Item</th>
             <th>Category</th>
             <th>Have</th>
-            <th>Want</th>
+            <th>Need</th>
             <th>Per week</th>
             <th>Max buy</th>
             <th>Best price</th>

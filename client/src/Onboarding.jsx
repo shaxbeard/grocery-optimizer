@@ -1,4 +1,4 @@
-import { AddItemForm } from './Dashboard'
+import { ItemTools } from './Dashboard'
 
 export default function Onboarding({ refresh }) {
   return (
@@ -7,7 +7,7 @@ export default function Onboarding({ refresh }) {
         <h2>Welcome! Let's set up your groceries</h2>
         <p className="muted">Add your first item to get started. You can add more from the inventory page.</p>
       </div>
-      <AddItemForm refresh={refresh} />
+      <ItemTools refresh={refresh} />
     </>
   )
 }
